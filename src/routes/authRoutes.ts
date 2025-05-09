@@ -1,19 +1,11 @@
-/**
- * src/routes/authRoutes.ts
- */
+// src/routes/authRoutes.ts
+import express from 'express';
+import { register, login, verifyCode } from '../controllers/authController';
 
-import { Router } from 'express';
-import { login, register, verifyCode, resendCode } from '../controllers/authController';
+const router = express.Router();
 
-const router = Router();
-
-// Ruta para el inicio de sesión
-router.post('/login', login);
-
-// Ruta para el registro de nuevos usuarios
 router.post('/register', register);
-
-router.post('/verify-code', verifyCode);
-router.post('/resend-code', resendCode);
+router.post('/login', login);
+router.post('/verifyCode', verifyCode);
 
 export default router;

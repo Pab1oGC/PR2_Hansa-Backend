@@ -1,21 +1,34 @@
+// src/server.ts
 import express from 'express';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import cors from 'cors'; // 👉 Importa CORS
+import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
+const uploadRoute = require("./routes/uploadRoute");
+const auth = require("./middleware/auth");
+import fileRoutes from './routes/fileRoutes';
+import repositoryRoutes from './routes/repositoryRoutes';
+
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
+app.use(cors({
+  origin: 'http://localhost:5173', // El frontend (React) corre en este puerto
+  credentials: true, // Si más adelante manejas cookies o cabeceras auth
+}));
 app.use(express.json());
 
-// Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/repositorios', repositoryRoutes);
 
-mongoose
-  .connect(process.env.MONGO_URI || '')
+
+mongoose.connect(process.env.MONGO_URI!)
   .then(() => {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    console.log('MongoDB conectado');
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`));
+
   })
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch((err) => console.error('Error al conectar a MongoDB:', err));

@@ -1,123 +1,143 @@
-/**
- * src/controllers/authController.ts
- */
-
+// src/controllers/authController.ts
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
+import Repository from '../models/Repository';
+import { sendVerificationEmail } from '../utils/sendEmail';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
-const SALT_ROUNDS = 10; // Número de rondas de sal para bcrypt (mayor es más seguro, pero más lento)
-
-let currentVerificationCode: string = generateCode();
-let codeExpiresAt: number = Date.now() + 2 * 60 * 1000; // 2 minutos
-
-function generateCode(): string {
-  return Array.from({ length: 6 }, () =>
-    Math.floor(Math.random() * 10).toString()
-  ).join('');
-}
-
-/**
- * REGISTER
- * @param req 
- * @param res 
- * @returns 
- */
-export const register = async (req: Request, res: Response): Promise<Response> => {
-  const { username, password } = req.body;
-
+export const register = async (req: Request, res: Response) => {
   try {
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
-      return res.status(409).json({ message: 'Email already exists' });
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
 
-    // 1. Generar el hash de la contraseña
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      res.status(400).json({ message: 'El usuario o email ya están en uso.' });
+    }
 
-    // 2. Crear un nuevo usuario con la contraseña hasheada
-    const newUser = new User({ username, password: hashedPassword });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ username, email, password: hashedPassword });
     await newUser.save();
 
-    return res.status(201).json({ message: 'User registered successfully' });
-  } catch (error: any) {
-    console.error('Error registering user:', error);
-    return res.status(500).json({ message: 'Could not register user' });
+    // 👇 Crear el repositorio personal del usuario
+    const personalRepo = new Repository({
+      name: `Repositorio de ${username}`,
+      description: 'Repositorio personal del usuario',
+      type: 'personal',
+      linkedToUser: newUser._id,
+      owner: newUser._id,
+      members: [newUser._id],
+      files: []
+    });
+
+    await personalRepo.save();
+
+    // 👇 Vincular el repositorio al usuario
+    newUser.repositories.push(personalRepo._id as typeof newUser.repositories[0]);
+    await newUser.save();
+
+    res.status(201).json({ message: 'Usuario registrado exitosamente.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error en el servidor.' });
   }
 };
 
-/**
- * LOGIN
- * @param req 
- * @param res 
- * @returns 
- */
-export const login = async (req: Request, res: Response): Promise<Response> => {
-  const { username, password } = req.body;
 
+export const login = async (req: Request, res: Response) => {
   try {
+    const { username, password } = req.body;
+
     const user = await User.findOne({ username });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      res.status(400).json({ message: 'Credenciales inválidas.' });
     }
 
-    // Ahora 'user.password' debería ser el hash almacenado
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      res.status(400).json({ message: 'Credenciales inválidas.' });
+    }
+    const token = jwt.sign(
+      { id: user._id, username: user.username },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1d' }
+    );
+
+    // Crear código de verificación
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
+    const expires = new Date();
+    expires.setMinutes(expires.getMinutes() + 10); // Código válido 10 minutos
+
+    // Guardar en el usuario
+    user.verificationCode = verificationCode;
+    user.verificationCodeExpires = expires;
+    await user.save();
+
+    // Enviar el correo
+    console.log('Enviando correo...');
+    console.log(user.email, verificationCode);
+    await sendVerificationEmail(user.email, verificationCode);
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error en el servidorakjshfdkshfa.' });
+  }
+  
+};
+
+export const verifyCode = async (req: Request, res: Response) => {
+  try {
+    const { username, code } = req.body;
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      res.status(400).json({ message: 'Usuario no encontrado.' });
     }
 
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
+    if (user.verificationCode !== code) {
+      res.status(400).json({ message: 'Código inválido.' });
+    }
 
-    return res.status(200).json({ token });
-  } catch (error: any) {
-    console.error('Error during login:', error);
-    return res.status(500).json({ message: 'Could not log in' });
+    if (user.verificationCodeExpires && user.verificationCodeExpires < new Date()) {
+      res.status(400).json({ message: 'El código ha expirado.' });
+    }
+
+    // Código correcto → Generamos JWT
+    const token = jwt.sign(
+      { id: user._id, username: user.username },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1d' }
+    );
+
+    // Limpiar el código de verificación
+    user.verificationCode = undefined;
+    user.verificationCodeExpires = undefined;
+    await user.save();
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+      },
+    });
+    
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error en el servidor.' });
   }
 };
 
-/**
- * AUTH - VERIFY CODE
- * CREATED/UPDATED BY HEREDIA
- * @param req 
- * @param res 
- * @returns 
- */
-export const verifyCode = (req: Request, res: Response): Response => {
-  const { code } = req.body;
-
-  if (!code || code.length !== 6) {
-    return res.status(400).json({ success: false, message: "El código debe tener 6 dígitos." });
-  }
-
-  if (Date.now() > codeExpiresAt) {
-    return res.status(410).json({ success: false, message: "El código ha expirado. Solicita uno nuevo." });
-  }
-
-  if (code !== currentVerificationCode) {
-    return res.status(401).json({ success: false, message: "Código inválido." });
-  }
-
-  return res.status(200).json({ success: true, message: "✅ Código verificado correctamente." });
-  // created/updated by heredia
-};
-
-/**
- * AUTH - RESEND CODE
- * CREATED/UPDATED BY HEREDIA
- */
-export const resendCode = (req: Request, res: Response): Response => {
-  currentVerificationCode = generateCode();
-  codeExpiresAt = Date.now() + 2 * 60 * 1000;
-
-  console.log("📩 Nuevo código generado:", currentVerificationCode);
-
-  return res.status(200).json({
-    success: true,
-    message: "Código reenviado al correo registrado.",
-    code: process.env.NODE_ENV !== 'production' ? currentVerificationCode : undefined,
-  });
-  // created/updated by heredia
-};
