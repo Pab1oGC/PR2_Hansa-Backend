@@ -1,8 +1,11 @@
 // src/server.ts
 import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors'; // 👉 Importa CORS
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import cors from 'cors';
+import morgan from 'morgan';
+import { logger } from './utils/logger';
+import mongoose from 'mongoose';
 import authRoutes from './routes/authRoutes';
 const uploadRoute = require("./routes/uploadRoute");
 const auth = require("./middleware/auth");
@@ -18,6 +21,12 @@ app.use(cors({
   credentials: true, // Si más adelante manejas cookies o cabeceras auth
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('combined', {
+    stream: {
+      write: (message: string) => logger.info(message.trim()),
+    },
+  }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
