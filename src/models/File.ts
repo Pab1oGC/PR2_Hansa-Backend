@@ -1,43 +1,20 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose from 'mongoose';
 
-interface IFile extends Document {
-  name: string;
-  description: string;
-  importance: 'alta' | 'media' | 'baja' | 'ninguna';
-  tags: string[];
-  privacy: 'public' | 'private';
-  owner: mongoose.Types.ObjectId;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  fileId: mongoose.Types.ObjectId; // ID generado por GridFS
-  createdAt: Date;
-}
-
-const fileSchema = new Schema<IFile>(
+const fileSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    description: { type: String },
-    importance: {
-      type: String,
-      enum: ['alta', 'media', 'baja', 'ninguna'],
-      default: 'ninguna',
-    },
-    tags: [{ type: String }],
-    privacy: {
-      type: String,
-      enum: ['public', 'private'],
-      default: 'private',
-    },
-    owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    originalName: { type: String, required: true },
-    mimeType: { type: String, required: true },
+    filename: { type: String, required: true },
+    originalname: { type: String, required: true },
+    contentType: { type: String, required: true },
     size: { type: Number, required: true },
-    fileId: { type: Schema.Types.ObjectId, required: true }, // ID del archivo en GridFS
+    metadata: {
+      title: String,
+      author: String,
+      description: String,
+      tags: [String],
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    },
   },
-  { timestamps: true } // Genera createdAt y updatedAt automáticamente
+  { timestamps: true }
 );
 
-const File = mongoose.model<IFile>('File', fileSchema);
-
-export default File;
+export default mongoose.model('File', fileSchema);

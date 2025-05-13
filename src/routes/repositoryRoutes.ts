@@ -1,10 +1,11 @@
-// src/routes/repositoryRoutes.ts
+// routes/repositoryRoutes.ts
+
 import express from 'express';
 import { getPersonalRepository } from '../controllers/repositoryController';
-import { authenticateToken } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
 
 const router = express.Router();
 
-router.get('/personal', authenticateToken, getPersonalRepository);
+router.get('/personal', verifyToken, getPersonalRepository);
 
 export default router;

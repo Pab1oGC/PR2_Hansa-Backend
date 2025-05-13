@@ -1,92 +1,82 @@
-import { Request, Response } from 'express';
-import { MongoClient, GridFSBucket } from 'mongodb';
-import File from "../models/File"; // Asegúrate de que sea tu modelo correcto
-import Repository from "../models/Repository"; // Asegúrate de que sea el modelo de repositorio correcto
+import { RequestHandler } from 'express';
+import mongoose from 'mongoose';
+import { GridFSBucket, ObjectId } from 'mongodb';
+import File from '../models/File';
 
-export const uploadFileToPersonalRepo = async (req: Request, res: Response) => {
-    const { name, description, importance, tags, privacy, repositoryId } = req.body;
-    const file = req.file;
+let gfsBucket: GridFSBucket;
 
-    if (!file) res.status(400).json({ message: 'Archivo no recibido' });
+mongoose.connection.once('open', () => {
+  gfsBucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+    bucketName: 'uploads',
+  });
+});
 
-    try {
-        const client = await MongoClient.connect(process.env.MONGO_URI || '');
-        const db = client.db(process.env.DB_NAME);
-        const bucket = new GridFSBucket(db, { bucketName: 'userFiles' });
-
-        const uploadStream = bucket.openUploadStream(name, {
-            metadata: {
-                userId: (req as any).user.id,
-                description,
-                importance,
-                tags: JSON.parse(tags),
-                privacy,
-                originalName: file.originalname,
-                mimeType: file.mimetype,
-                size: file.size,
-                uploadedAt: new Date(),
-            },
-        });
-
-        uploadStream.end(file.buffer);
-
-        uploadStream.on('finish', async () => {
-            try {
-                // Guardar metadatos en MongoDB (colección File)
-                const newFile = new File({
-                    name,
-                    description,
-                    importance,
-                    tags: JSON.parse(tags),
-                    privacy,
-                    owner: (req as any).user.id,
-                    originalName: file.originalname,
-                    mimeType: file.mimetype,
-                    size: file.size,
-                    fileId: uploadStream.id, // ID de GridFS
-                });
-
-                await newFile.save();
-
-                // Actualizar el repositorio y asociar el archivo subido
-                await Repository.findByIdAndUpdate(repositoryId, {
-                    $push: {
-                        files: {
-                            _id: uploadStream.id,
-                            name,
-                            description,
-                            importance,
-                            tags: JSON.parse(tags),
-                            privacy,
-                        },
-                    },
-                });
-
-                res.status(201).json({ message: 'Archivo subido y vinculado con éxito', fileId: uploadStream.id });
-            } catch (err) {
-                console.error(err);
-                res.status(500).json({ message: 'Error al guardar metadatos o actualizar repositorio' });
-            }
-        });
-
-        uploadStream.on('error', (err) => {
-            console.error(err);
-            res.status(500).json({ message: 'Error al subir archivo' });
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error del servidor' });
+export const uploadFile: RequestHandler = async (req, res) => {
+  try {
+    const file = (req as any).file;
+    if (!file) {
+       res.status(400).json({ message: 'No se subió ningún archivo' });
+       return;
     }
-};
 
-export const getUserFiles = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.id;
-        const files = await File.find({ owner: userId }).sort({ createdAt: -1 }); // Orden por fecha de subida reciente
+    const { title, author, description, tags, repositoryId, importance, privacy } = req.body;
 
-        res.json(files);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error al recuperar archivos' });
+    const metadata: any = {
+      title,
+      author,
+      description,
+      tags: tags?.split(',') || [],
+      uploadedBy: (req as any).user.id,
+      importance,
+      privacy,
+    };
+
+    if (repositoryId) {
+      metadata.repositoryId = new mongoose.Types.ObjectId(repositoryId);
     }
+
+    const uploadStream = gfsBucket.openUploadStream(file.originalname, {
+      contentType: file.mimetype,
+      metadata,
+    });
+
+    const gridFsId: ObjectId = uploadStream.id as ObjectId;
+
+    uploadStream.end(file.buffer);
+
+    uploadStream.on('finish', async () => {
+      // Consulta para obtener el archivo de GridFS con ese ID
+      const storedFile = await gfsBucket
+        .find({ _id: gridFsId })
+        .toArray();
+
+      if (!storedFile || storedFile.length === 0) {
+        return res.status(404).json({ message: 'No se pudo recuperar el archivo de GridFS' });
+      }
+
+      const newFile = new File({
+        filename: storedFile[0].filename,
+        originalname: file.originalname,
+        contentType: file.mimetype,
+        size: file.size,
+        metadata: {
+          ...metadata,
+          gridFsId: storedFile[0]._id,
+        },
+      });
+
+      await newFile.save();
+
+      res.status(201).json({ message: 'Archivo subido con éxito', file: newFile });
+    });
+
+    uploadStream.on('error', (error) => {
+      console.error('Error subiendo a GridFS:', error);
+      res.status(500).json({ message: 'Error al guardar archivo en GridFS', error });
+    });
+
+  } catch (error) {
+    console.error("Error al subir archivo:", error);
+    res.status(500).json({ message: 'Error al subir el archivo', error });
+  }
 };

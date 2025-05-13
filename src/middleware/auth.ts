@@ -1,29 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { _id: string };
-    }
-  }
-}
 import jwt from 'jsonwebtoken';
 
-interface DecodedToken {
-  _id: string;
-  email: string;
-}
+export const verifyToken = (req: Request, res: Response, next: NextFunction) => {
+  const token = req.headers['authorization']?.split(' ')[1];
 
-export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-
-  if (!token) res.status(401).json({ message: 'Token no proporcionado' });
+  if (!token) {
+    res.status(401).json({ message: 'Token requerido' });
+    return;
+  }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || '') as DecodedToken;
-    req.user = { _id: decoded._id }; // puedes añadir más si quieres
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    (req as any).user = decoded;
     next();
-  } catch (error) {
-   res.status(401).json({ message: 'Token inválido' });
+  } catch (err) {
+    res.status(403).json({ message: 'Token inválido' });
+    return;
   }
 };

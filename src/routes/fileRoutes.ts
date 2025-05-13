@@ -1,14 +1,15 @@
 import express from 'express';
 import multer from 'multer';
-import { getUserFiles, uploadFileToPersonalRepo } from '../controllers/fileController';
-import { authenticateToken } from '../middleware/auth';
+import { uploadFile } from '../controllers/fileController';
+import { verifyToken } from '../middleware/auth';
 
 const router = express.Router();
+
+// Configuración de Multer con almacenamiento temporal
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Ruta: POST /api/files/upload-to-personal
-router.post('/upload-to-personal', authenticateToken, upload.single('file'), uploadFileToPersonalRepo);
-router.get('/personal', authenticateToken, getUserFiles);
+router.post('/upload', verifyToken , upload.single('file'), uploadFile); // ✅ Correcto
+
 
 export default router;
