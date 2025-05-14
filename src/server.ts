@@ -7,8 +7,9 @@ import morgan from 'morgan';
 import { logger } from './utils/logger';
 import mongoose from 'mongoose';
 import authRoutes from './routes/authRoutes';
-const uploadRoute = require("./routes/uploadRoute");
-const auth = require("./middleware/auth");
+//const uploadRoute = require("./routes/uploadRoute");
+//const auth = require("./middleware/auth");
+
 import fileRoutes from './routes/fileRoutes';
 import repositoryRoutes from './routes/repositoryRoutes';
 

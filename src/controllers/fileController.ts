@@ -2,6 +2,7 @@ import { RequestHandler } from 'express';
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
 import File from '../models/File';
+import { getDb } from '../config/db';
 
 let gfsBucket: GridFSBucket;
 
@@ -78,5 +79,24 @@ export const uploadFile: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Error al subir archivo:", error);
     res.status(500).json({ message: 'Error al subir el archivo', error });
+  }
+};
+
+export const getFilesByRepositoryId : RequestHandler = async (req, res) => {
+  try {
+    const { repositoryId } = req.params;
+    const db = getDb();
+
+    const files = await db.collection('uploads.files').find({
+      'metadata.repositoryId': new ObjectId(repositoryId)
+    }).toArray();
+    if (!files || files.length === 0) {
+      console.log("No se encontraron archivos para este repositorio");
+    }
+
+    res.status(200).json(files);
+  } catch (error) {
+    console.error("Error al buscar archivos:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 };
