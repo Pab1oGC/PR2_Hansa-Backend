@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
 import File from '../models/File';
 import { getDb } from '../config/db';
+import mime from 'mime-types';
 
 let gfsBucket: GridFSBucket;
 
@@ -99,4 +100,60 @@ export const getFilesByRepositoryId : RequestHandler = async (req, res) => {
     console.error("Error al buscar archivos:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
+};
+
+export const getFileById: RequestHandler = async (req, res) => {
+  try {
+    const fileId = new ObjectId(req.params.id);
+    const file = await gfsBucket.find({ _id: fileId }).toArray();
+    if (!file || file.length === 0) {
+      res.status(404).json({ message: 'Archivo no encontrado' });
+      return;
+    }
+    console.log('📄 Solicitando archivo con ID:', req.params.id);
+
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `inline; filename="${file[0].filename}"`,
+    });
+
+    const downloadStream = gfsBucket.openDownloadStream(fileId);
+    downloadStream.pipe(res);
+  } catch (error) {
+    console.error('Error al obtener archivo:', error);
+    res.status(500).json({ message: 'Error al recuperar el archivo' });
+  }
+};
+
+export const onlyOfficeCallback: RequestHandler = async (req, res) => {
+  const { status, url } = req.body;
+  const fileId = new ObjectId(req.params.id);
+
+  if (status === 2 || status === 6) { // Documento editado y listo para guardar
+    try {
+      // Descargar archivo editado
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Borrar archivo anterior
+      await gfsBucket.delete(fileId);
+
+      // Volver a subir el archivo actualizado
+      const uploadStream = gfsBucket.openUploadStreamWithId(fileId, req.body.filename || 'updated.docx', {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+
+      uploadStream.end(buffer);
+      res.status(200).json({ message: 'Archivo actualizado' });
+      return;
+    } catch (error) {
+      console.error('Error guardando archivo editado:', error);
+      res.status(500).json({ message: 'Error al guardar archivo' });
+      return;
+    }
+  }
+
+  res.status(200).json({ message: 'Sin cambios' });
+  return;
 };

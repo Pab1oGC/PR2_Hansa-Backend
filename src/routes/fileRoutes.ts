@@ -1,6 +1,10 @@
 import express from 'express';
 import multer from 'multer';
-import { uploadFile,getFilesByRepositoryId } from '../controllers/fileController';
+import {uploadFile,
+        getFilesByRepositoryId,
+        getFileById,
+        onlyOfficeCallback
+ } from '../controllers/fileController';
 import { verifyToken } from '../middleware/auth';
 
 const router = express.Router();
@@ -10,8 +14,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 router.post('/upload', verifyToken , upload.single('file'), uploadFile); // ✅ Correcto
-router.get('/myfiles/:repositoryId', verifyToken, getFilesByRepositoryId); // ✅ Correcto
-
+router.get('/myfiles/:repositoryId', verifyToken, getFilesByRepositoryId);
+router.get('/:id', getFileById);  // ✅ Correcto
+router.post('/onlyoffice-callback/:id', onlyOfficeCallback);
 
 
 export default router;

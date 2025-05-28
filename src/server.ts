@@ -18,8 +18,9 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:5173', // El frontend (React) corre en este puerto
-  credentials: true, // Si más adelante manejas cookies o cabeceras auth
+  origin: ['http://localhost:5173', 'http://192.168.1.9:8888'], // El frontend (React) corre en este puerto
+  credentials: true,
+  exposedHeaders: ['Content-Disposition'] // Si más adelante manejas cookies o cabeceras auth
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
