@@ -14,19 +14,22 @@ mongoose.connection.once('open', () => {
 
 export const uploadFile: RequestHandler = async (req, res) => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const file = (req as any).file;
     if (!file) {
-       res.status(400).json({ message: 'No se subió ningún archivo' });
-       return;
+      res.status(400).json({ message: 'No se subió ningún archivo' });
+      return;
     }
 
     const { title, author, description, tags, repositoryId, importance, privacy } = req.body;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metadata: any = {
       title,
       author,
       description,
       tags: tags?.split(',') || [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       uploadedBy: (req as any).user.id,
       importance,
       privacy,
@@ -47,9 +50,7 @@ export const uploadFile: RequestHandler = async (req, res) => {
 
     uploadStream.on('finish', async () => {
       // Consulta para obtener el archivo de GridFS con ese ID
-      const storedFile = await gfsBucket
-        .find({ _id: gridFsId })
-        .toArray();
+      const storedFile = await gfsBucket.find({ _id: gridFsId }).toArray();
 
       if (!storedFile || storedFile.length === 0) {
         return res.status(404).json({ message: 'No se pudo recuperar el archivo de GridFS' });
@@ -75,28 +76,30 @@ export const uploadFile: RequestHandler = async (req, res) => {
       console.error('Error subiendo a GridFS:', error);
       res.status(500).json({ message: 'Error al guardar archivo en GridFS', error });
     });
-
   } catch (error) {
-    console.error("Error al subir archivo:", error);
+    console.error('Error al subir archivo:', error);
     res.status(500).json({ message: 'Error al subir el archivo', error });
   }
 };
 
-export const getFilesByRepositoryId : RequestHandler = async (req, res) => {
+export const getFilesByRepositoryId: RequestHandler = async (req, res) => {
   try {
     const { repositoryId } = req.params;
     const db = getDb();
 
-    const files = await db.collection('uploads.files').find({
-      'metadata.repositoryId': new ObjectId(repositoryId)
-    }).toArray();
+    const files = await db
+      .collection('uploads.files')
+      .find({
+        'metadata.repositoryId': new ObjectId(repositoryId),
+      })
+      .toArray();
     if (!files || files.length === 0) {
-      console.log("No se encontraron archivos para este repositorio");
+      console.log('No se encontraron archivos para este repositorio');
     }
 
     res.status(200).json(files);
   } catch (error) {
-    console.error("Error al buscar archivos:", error);
-    res.status(500).json({ message: "Error interno del servidor" });
+    console.error('Error al buscar archivos:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
   }
 };

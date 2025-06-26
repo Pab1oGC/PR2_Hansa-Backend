@@ -5,7 +5,7 @@ let db: Db;
 
 export const getDb = (): Db => {
   if (!db) {
-    db = mongoose.connection.db; 
+    db = mongoose.connection.db;
   }
   return db;
 };

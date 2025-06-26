@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import Repository from '../models/Repository';
 import { sendVerificationEmail } from '../utils/sendEmail';
+import { logger } from '../utils/logger';
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -31,22 +32,21 @@ export const register = async (req: Request, res: Response) => {
       linkedToUser: newUser._id,
       owner: newUser._id,
       members: [newUser._id],
-      files: []
+      files: [],
     });
 
     await personalRepo.save();
 
     // 👇 Vincular el repositorio al usuario
-    newUser.repositories.push(personalRepo._id as typeof newUser.repositories[0]);
+    newUser.repositories.push(personalRepo._id as (typeof newUser.repositories)[0]);
     await newUser.save();
 
     res.status(201).json({ message: 'Usuario registrado exitosamente.' });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: 'Error en el servidor.' });
   }
 };
-
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -62,9 +62,9 @@ export const login = async (req: Request, res: Response) => {
       res.status(400).json({ message: 'Credenciales inválidas.' });
     }
     const token = jwt.sign(
-      { id: user._id, username: user.username },
+      { id: user._id, username: user.username, email: user.email },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1d' }
+      { expiresIn: '1d' },
     );
 
     // Crear código de verificación
@@ -78,10 +78,10 @@ export const login = async (req: Request, res: Response) => {
     await user.save();
 
     // Enviar el correo
-    console.log('Enviando correo...');
-    console.log(user.email, verificationCode);
+    logger.error('Enviando correo...');
+    logger.error(user.email, verificationCode);
     await sendVerificationEmail(user.email, verificationCode);
-
+    logger.error(verificationCode);
     res.json({
       token,
       user: {
@@ -91,10 +91,9 @@ export const login = async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: 'Error en el servidorakjshfdkshfa.' });
   }
-  
 };
 
 export const verifyCode = async (req: Request, res: Response) => {
@@ -118,7 +117,7 @@ export const verifyCode = async (req: Request, res: Response) => {
     const token = jwt.sign(
       { id: user._id, username: user.username },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1d' }
+      { expiresIn: '1d' },
     );
 
     // Limpiar el código de verificación
@@ -134,10 +133,8 @@ export const verifyCode = async (req: Request, res: Response) => {
         email: user.email,
       },
     });
-    
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: 'Error en el servidor.' });
   }
 };
-
